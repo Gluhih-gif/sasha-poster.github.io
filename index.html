@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Выкладка постов из предложки</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    button, input { font-size: 16px; padding: 10px; margin-top: 10px; }
+    pre { background: #eee; padding: 10px; height: 300px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h2>Выкладка постов из предложки</h2>
+
+  <label>Access Token:</label><br />
+  <input type="text" id="token" placeholder="Вставьте ваш access_token" /><br />
+
+  <label>Время выкладки (часы:минуты):</label><br />
+  <input type="time" id="postTime" value="10:00" /><br />
+
+  <button onclick="startAutoPost()">Запустить автовыкладку</button>
+  <button onclick="stopAutoPost()">Остановить</button>
+  <button onclick="postNow()">Выложить всё сейчас</button>
+  <button onclick="checkPosts()">Проверить посты (по ID и телефонам)</button>
+
+  <pre id="log"></pre>
+
+<script>
+const GROUP_ID = 136706358;
+const OWNER_ID = -GROUP_ID;
+let tokenInput = document.getElementById("token");
+let token = "";
+let autoPostInterval = null;
+
+function log(msg) {
+  const el = document.getElementById("log");
+  el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}
+`;
+  el.scrollTop = el.scrollHeight;
+}
+
+tokenInput.addEventListener("input", () => {
+  token = tokenInput.value;
+});
+
+function startAutoPost() {
+  const [hours, minutes] = document.getElementById("postTime").value.split(":").map(Number);
+  log(`Автовыкладка включена на ${hours}:${minutes}`);
+  autoPostInterval = setInterval(async () => {
+    const now = new Date();
+    if (now.getHours() === hours && now.getMinutes() === minutes) {
+      await postNow();
+    }
+  }, 60000);
+}
+
+function stopAutoPost() {
+  clearInterval(autoPostInterval);
+  log("Автовыкладка остановлена");
+}
+
+async function checkPosts() {
+  if (!token) {
+    log("Токен не введён");
+    return;
+  }
+  const suggests = await fetch(`https://api.vk.com/method/wall.get?owner_id=${OWNER_ID}&filter=suggests&count=100&access_token=${token}&v=5.199`)
+    .then(res => res.json());
+  if (!suggests.response) {
+    log("Ошибка получения предложки");
+    return;
+  }
+  const checked = suggests.response.items.filter(post => {
+    const hasPhone = /(?:\+7|8)?[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}/.test(post.text);
+    return hasPhone;
+  });
+  log(`Прошли проверку: ${checked.length} из ${suggests.response.items.length}`);
+}
+
+async function postNow() {
+  if (!token) {
+    log("Токен не введён");
+    return;
+  }
+  const suggests = await fetch(`https://api.vk.com/method/wall.get?owner_id=${OWNER_ID}&filter=suggests&count=100&access_token=${token}&v=5.199`)
+    .then(res => res.json());
+  if (!suggests.response) {
+    log("Ошибка получения предложки");
+    return;
+  }
+  for (const post of suggests.response.items) {
+    const postId = post.id;
+    const message = post.text;
+    const attachments = (post.attachments || []).map(a => `${a.type}${a[a.type].owner_id}_${a[a.type].id}`).join(',');
+    const copyHistory = post.copy_history || [];
+
+    await fetch("https://api.vk.com/method/wall.post", {
+      method: "POST",
+      body: new URLSearchParams({
+        owner_id: OWNER_ID,
+        from_group: "0",
+        message,
+        attachments,
+        copy_history: copyHistory,
+        access_token: token,
+        v: "5.199"
+      })
+    });
+    await fetch("https://api.vk.com/method/wall.delete", {
+      method: "POST",
+      body: new URLSearchParams({
+        owner_id: OWNER_ID,
+        post_id: postId,
+        access_token: token,
+        v: "5.199"
+      })
+    });
+    log(`Выложен пост: ${postId}`);
+  }
+}
+</script>
+</body>
+</html>
