@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>VK Постер — Полный функционал</title>
+  <style>
+    body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+    h2 { margin-top: 0; }
+    input, button, select { margin: 5px 0; padding: 8px; font-size: 14px; }
+    #log { background: #fff; border: 1px solid #ccc; padding: 10px; height: 250px; overflow-y: auto; margin-top: 10px; white-space: pre-line; }
+    .log-success { color: green; }
+    .log-error { color: red; }
+    .log-info { color: #000; }
+  </style>
+</head>
+<body>
+  <h2>VK Постер — Выкладка от авторов с проверкой</h2>
+
+  <label>Время автопубликации:</label>
+  <input type="time" id="autoTime" value="10:00">
+  <br>
+  <button onclick="checkPosts()">Проверить посты</button>
+  <button onclick="deleteRejected()">Удалить неподходящие</button>
+  <button onclick="publishAll()">Выложить всё сейчас</button>
+  <button onclick="startAuto()">Запустить автопостинг</button>
+  <button onclick="stopAuto()">Остановить автопостинг</button>
+  <button onclick="clearLog()">Очистить лог</button>
+
+  <div id="log">[Готово к работе]</div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+  <script>
+    const token = "vk1.aBC123REALTOKENEXAMPLE987654321"; // Встроенный токен
+    const group_id = 136706358;
+    let rejectedPosts = [];
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA2ziFMtskwVS59TYpylzRYYPm3KUaHRZM",
+      authDomain: "vk-post-filter.firebaseapp.com",
+      databaseURL: "https://vk-post-filter-default-rtdb.firebaseio.com",
+      projectId: "vk-post-filter",
+      storageBucket: "vk-post-filter.appspot.com",
+      messagingSenderId: "870137473414",
+      appId: "1:870137473414:web:df8b501b64a63b4c3a2407"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function log(text, type = 'info') {
+      const logBox = document.getElementById('log');
+      const line = document.createElement('div');
+      line.className = 'log-' + type;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById("log").innerHTML = '';
+    }
+
+    function extractPhone(text) {
+      const match = text.match(/\+?\d[\d\- ]{7,}/);
+      return match ? match[0].replace(/\D/g, '') : null;
+    }
+
+    async function loadHistory() {
+      const snap = await db.ref("history").once("value");
+      return snap.val() || {};
+    }
+
+    async function saveToHistory(id, phone) {
+      const key = Date.now();
+      await db.ref("history/" + key).set({ id, phone, time: key });
+    }
+
+    async function checkPosts() {
+      rejectedPosts = [];
+      const url = `https://api.vk.com/method/wall.get?owner_id=-${group_id}&filter=suggests&count=100&access_token=${token}&v=5.199`;
+      log("Загружаем предложку...", "info");
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const posts = data.response.items || [];
+        const history = await loadHistory();
+        const now = Date.now();
+        let passed = 0;
+
+        for (const post of posts) {
+          const postId = post.id;
+          const fromId = post.from_id;
+          const phone = extractPhone(post.text);
+          let rejected = false;
+
+          for (const key in history) {
+            const rec = history[key];
+            if (now - rec.time > 86400000) continue;
+            if (rec.id === fromId) {
+              log(`Пост ${postId} — отклонён (повтор ID ${fromId})`, "error");
+              rejected = true;
+              break;
+            }
+            if (phone && rec.phone === phone) {
+              log(`Пост ${postId} — отклонён (повтор номера ${phone})`, "error");
+              rejected = true;
+              break;
+            }
+          }
+
+          if (!rejected && !phone) {
+            log(`Пост ${postId} — отклонён (нет номера)`, "error");
+            rejected = true;
+          }
+
+          if (!rejected) {
+            await saveToHistory(fromId, phone);
+            log(`Пост ${postId} принят`, "success");
+            passed++;
+          } else {
+            rejectedPosts.push(postId);
+          }
+        }
+
+        log(`Проверка завершена. Принято: ${passed} из ${posts.length}`, "info");
+
+      } catch (e) {
+        log("Ошибка запроса: " + e.message, "error");
+      }
+    }
+
+    async function deleteRejected() {
+      for (const postId of rejectedPosts) {
+        const res = await fetch("https://api.vk.com/method/wall.delete", {
+          method: "POST",
+          body: new URLSearchParams({
+            owner_id: `-${group_id}`,
+            post_id: postId,
+            access_token: token,
+            v: "5.199"
+          })
+        });
+        log(`Удалён пост ${postId}`, "error");
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    async function publishAll() {
+      const url = `https://api.vk.com/method/wall.get?owner_id=-${group_id}&filter=suggests&count=100&access_token=${token}&v=5.199`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const posts = data.response.items || [];
+
+      for (const post of posts) {
+        const res = await fetch("https://api.vk.com/method/wall.copy", {
+          method: "POST",
+          body: new URLSearchParams({
+            owner_id: `-${group_id}`,
+            post_id: post.id,
+            access_token: token,
+            v: "5.199"
+          })
+        });
+        log(`Выложен пост ${post.id}`, "success");
+        await new Promise(r => setTimeout(r, 10000));
+      }
+    }
+
+    let autoInterval = null;
+    function startAuto() {
+      stopAuto();
+      const time = document.getElementById("autoTime").value;
+      const [h, m] = time.split(":").map(Number);
+      autoInterval = setInterval(() => {
+        const now = new Date();
+        if (now.getHours() === h && now.getMinutes() === m) {
+          log("Автовыкладка запущена по времени", "info");
+          publishAll();
+        }
+      }, 60000);
+      log("Автовыкладка включена", "info");
+    }
+
+    function stopAuto() {
+      if (autoInterval) clearInterval(autoInterval);
+      log("Автовыкладка остановлена", "info");
+    }
+
+    // очистка истории через 24 часа
+    setInterval(async () => {
+      const snap = await db.ref("history").once("value");
+      const now = Date.now();
+      for (let key in snap.val()) {
+        if (now - snap.val()[key].time > 86400000) {
+          await db.ref("history/" + key).remove();
+        }
+      }
+    }, 60000);
+  </script>
+</body>
+</html>
