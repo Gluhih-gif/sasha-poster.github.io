@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>VK Постер — Автовыкладка</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        textarea { width: 100%; height: 300px; }
+        button { margin: 5px; }
+    </style>
+</head>
+<body>
+<h3>VK Постер — Выкладка от авторов с проверкой</h3>
+
+<p>Время автопубликации:
+<select id="autoTime">
+<option value="00:00">00:00</option>
+<option value="01:00">01:00</option>
+<option value="02:00">02:00</option>
+<option value="03:00">03:00</option>
+<option value="04:00">04:00</option>
+<option value="05:00">05:00</option>
+<option value="06:00">06:00</option>
+<option value="07:00">07:00</option>
+<option value="08:00">08:00</option>
+<option value="09:00">09:00</option>
+<option value="10:00">10:00</option>
+<option value="11:00">11:00</option>
+<option value="12:00">12:00</option>
+<option value="13:00">13:00</option>
+<option value="14:00">14:00</option>
+<option value="15:00">15:00</option>
+<option value="16:00">16:00</option>
+<option value="17:00">17:00</option>
+<option value="18:00">18:00</option>
+<option value="19:00">19:00</option>
+<option value="20:00">20:00</option>
+<option value="21:00">21:00</option>
+<option value="22:00">22:00</option>
+<option value="23:00">23:00</option></select></p>
+
+<button onclick="checkPosts()">Проверить посты</button>
+<button onclick="removeFiltered()">Удалить неподходящие</button>
+<button onclick="publishAll()">Выложить всё сейчас</button>
+<button onclick="startAutoposting()">Запустить автопостинг</button>
+<button onclick="stopAutoposting()">Остановить автопостинг</button>
+<button onclick="clearLog()">Очистить лог</button>
+
+<pre id="log">[Готово к работе]</pre>
+
+<script>
+const token = "vk1.a.jeQbIIZHdq1hHbXRx1rV87h5UecmXU2Smb750p1BtR2LI6eR04CV1aYeKVEErE3JCQYq8TqwE7wykUIogtr4n6gOs3BfnmryHZn-PGIiZNOo_5yElWlo3xab4aX4l1z-d-VQvgmtJ563xAfVOdgssvE-A-O3yX5f796fOhbQaHaTJmqVKfTBShZCf-MsMVBoVPSn_naEbsqUc7mXMwnd9g";
+const groupId = 123456789;
+
+let autoTimer = null;
+
+const log = msg => {
+    const logEl = document.getElementById("log");
+    logEl.textContent += "\n[" + new Date().toLocaleTimeString() + "] " + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+};
+
+function checkPosts() {
+    log("Загружаем предложку...");
+    fetch("https://api.vk.com/method/wall.get?owner_id=-" + groupId + "&filter=suggests&count=100&access_token=" + token + "&v=5.199")
+        .then(r => r.json())
+        .then(data => {
+            if (data.response) {
+                let history = JSON.parse(localStorage.getItem("history") || "{}");
+                let now = Date.now();
+                let posts = data.response.items || [];
+                let validPosts = [];
+                let filtered = 0;
+
+                posts.forEach(post => {
+                    let text = post.text || "";
+                    let phoneMatch = text.match(/\b\d{10,11}\b/g);
+                    let fromId = post.from_id;
+
+                    let expired = Object.keys(history).filter(k => now - history[k] > 86400000);
+                    expired.forEach(k => delete history[k]);
+
+                    if (!phoneMatch) {
+                        log("Удалён: нет номера — ID " + fromId);
+                        post.filtered = true; filtered++; return;
+                    }
+                    if (phoneMatch.some(p => history[p])) {
+                        log("Удалён: повтор номера — ID " + fromId);
+                        post.filtered = true; filtered++; return;
+                    }
+                    if (history[fromId]) {
+                        log("Удалён: повтор ID — ID " + fromId);
+                        post.filtered = true; filtered++; return;
+                    }
+
+                    validPosts.push(post);
+                });
+
+                localStorage.setItem("pending", JSON.stringify(posts));
+                localStorage.setItem("history", JSON.stringify(history));
+                log("Проверка завершена. Подходящих: " + validPosts.length + ", отклонено: " + filtered);
+            } else {
+                log("Ошибка ответа API");
+            }
+        }).catch(e => log("Ошибка запроса: " + e.message));
+}
+
+function removeFiltered() {
+    let posts = JSON.parse(localStorage.getItem("pending") || "[]");
+    let clean = posts.filter(p => !p.filtered);
+    localStorage.setItem("pending", JSON.stringify(clean));
+    log("Удалены все неподходящие посты");
+}
+
+function publishAll() {
+    let posts = JSON.parse(localStorage.getItem("pending") || "[]");
+    let history = JSON.parse(localStorage.getItem("history") || "{}");
+    let now = Date.now();
+
+    posts.forEach((post, i) => {
+        if (post.filtered) return;
+        setTimeout(() => {
+            fetch("https://api.vk.com/method/wall.post", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    owner_id: -groupId,
+                    from_group: 0,
+                    message: post.text,
+                    signed: 1,
+                    access_token: token,
+                    v: "5.199"
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.response) {
+                    log("Выложено: post_id " + data.response.post_id);
+                    let phones = (post.text.match(/\b\d{10,11}\b/g) || []);
+                    phones.forEach(p => history[p] = now);
+                    history[post.from_id] = now;
+                    localStorage.setItem("history", JSON.stringify(history));
+                } else {
+                    log("Ошибка выкладки: " + JSON.stringify(data.error));
+                }
+            });
+        }, i * 2000);
+    });
+}
+
+function startAutoposting() {
+    const time = document.getElementById("autoTime").value;
+    const [h, m] = time.split(":").map(Number);
+    autoTimer = setInterval(() => {
+        const now = new Date();
+        if (now.getHours() === h && now.getMinutes() === m) {
+            publishAll();
+        }
+    }, 60000);
+    log("Автовыкладка запущена на " + time);
+}
+
+function stopAutoposting() {
+    clearInterval(autoTimer);
+    log("Автовыкладка остановлена");
+}
+
+function clearLog() {
+    document.getElementById("log").textContent = "[Готово к работе]";
+}
+</script>
+</body>
+</html>
