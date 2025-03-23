@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>VK Постер — Вечный Токен</title>
+  <script>
+    const TOKEN = "vk1.xxxxxx_sample_token"; // сюда будет вставлен реальный токен
+    localStorage.setItem("access_token", TOKEN);
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const input = document.getElementById("access_token");
+      input.value = TOKEN;
+    });
+
+    function checkPosts() {
+      console.log("Проверка постов...");
+      // Добавить здесь проверку постов
+    }
+
+    function postAll() {
+      console.log("Выкладка всех постов...");
+      // Добавить здесь логику публикации
+    }
+  </script>
+</head>
+<body>
+  <h2>VK Постер — выкладка от имени авторов</h2>
+  <label>Access Token: <input type="text" id="access_token" disabled></label>
+  <div>
+    <button onclick="checkPosts()">Проверить посты</button>
+    <button onclick="postAll()">Выложить все</button>
+  </div>
+</body>
+</html>
