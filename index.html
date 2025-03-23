@@ -1,0 +1,45 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>VK Постер — выкладка от авторов</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f6f6f6; }
+        h1 { color: #333; }
+        button { margin-right: 10px; }
+        #log { white-space: pre-line; background: #fff; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: scroll; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>VK Постер — выкладка от авторов</h1>
+
+    <label>Access Token:</label><br>
+    <input type="text" id="token" value="vk1.aBC123REALTOKENEXAMPLE987654321" style="width: 100%;"><br><br>
+
+    <label>Время выкладки (часы:минуты):</label>
+    <select id="time"><option>10:00</option></select><br><br>
+
+    <button onclick="startAuto()">Запустить автовыкладку</button>
+    <button onclick="stopAuto()">Остановить</button>
+    <button onclick="postNow()">Выложить все сейчас</button>
+    <button onclick="checkPosts()">Проверить посты (по ID и телефонам)</button>
+
+    <div id="log">[12:00] Готово к работе.</div>
+
+    <script>
+        const log = (msg) => {
+            const el = document.getElementById('log');
+            el.textContent += `\n[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.scrollTop = el.scrollHeight;
+        };
+
+        function startAuto() { log("Автовыкладка запущена..."); }
+        function stopAuto() { log("Автовыкладка остановлена."); }
+        function postNow() { log("Выкладываем все посты сейчас..."); }
+        function checkPosts() { log("Проверка постов..."); }
+
+        // Firebase и функциональность фильтрации будут добавлены отдельно
+    </script>
+</body>
+</html>
