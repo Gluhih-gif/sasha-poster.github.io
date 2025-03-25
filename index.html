@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>VK Постер — Фильтрация предложки</title>
+  <style>
+.bad-post { background-color: #ff0000; color: #ffffff; border-left: 5px solid #990000; }
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    button { padding: 10px 15px; margin: 5px; background: #007acc; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #005fa3; }
+    .log { margin-top: 20px; padding: 10px; background: #fff; height: 300px; overflow-y: auto; border-radius: 5px; }
+    .bad { color: red; }
+    .good { color: green; }
+    a { color: inherit; text-decoration: underline; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js">
+function logWithCheckbox(post, msg, isBad) {
+  const log = document.getElementById("log");
+  const div = document.createElement("div");
+  div.className = "log-entry" + (isBad ? " bad-post" : "");
+  div.style.display = "flex";
+  div.style.alignItems = "start";
+  div.style.marginBottom = "4px";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = isBad;
+  checkbox.dataset.postId = post.id;
+  checkbox.className = "delete-checkbox";
+  checkbox.style.marginRight = "8px";
+
+  const span = document.createElement("span");
+  span.innerHTML = msg;
+
+  div.appendChild(checkbox);
+  div.appendChild(span);
+  log.appendChild(div);
+}
+
+
+async function saveHistory(ids, phones) {
+  const now = Date.now();
+  const updates = {};
+  Object.keys(ids).forEach(id => {
+    updates["history/ids/" + id] = now;
+  });
+  Object.keys(phones).forEach(phone => {
+    updates["history/phones/" + phone] = now;
+  });
+  await firebase.database().ref().update(updates);
+}
+
+</script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js">
+function logWithCheckbox(post, msg, isBad) {
+  const log = document.getElementById("log");
+  const div = document.createElement("div");
+  div.className = "log-entry" + (isBad ? " bad-post" : "");
+  div.style.display = "flex";
+  div.style.alignItems = "start";
+  div.style.marginBottom = "4px";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = isBad;
+  checkbox.dataset.postId = post.id;
+  checkbox.className = "delete-checkbox";
+  checkbox.style.marginRight = "8px";
+
+  const span = document.createElement("span");
+  span.innerHTML = msg;
+
+  div.appendChild(checkbox);
+  div.appendChild(span);
+  log.appendChild(div);
+}
+
+
+async function saveHistory(ids, phones) {
+  const now = Date.now();
+  const updates = {};
+  Object.keys(ids).forEach(id => {
+    updates["history/ids/" + id] = now;
+  });
+  Object.keys(phones).forEach(phone => {
+    updates["history/phones/" + phone] = now;
+  });
+  await firebase.database().ref().update(updates);
+}
+
+</script>
+</head>
+<body>
+<h1>VK Постер — Фильтрация предложки</h1>
+<button onclick="fetchPosts()">Загрузить предложку</button>
+<button onclick="checkPosts()">Проверить посты</button>
+<button onclick="clearBad()">Удалить неподходящие</button>
+<button onclick="postAll()">Выложить подходящие</button>
+<div class="log" id="log">[Готов к работе]</div>
+<script>
+const access_token = 'vk1.a.RwQAMDzAKOLOVWXNGaFusWEyDxGI_aUUVzavBjP3L0AlYLvM8jyV0cVAzQyB0zOym8iiCywQXAhMUGQlUM5QnRLjZT5EYreEv-Z4IFYn12b9mAI1aJDsWWuUv_rHuf3yyPzam2i7i193de8OVnCfUeTuPuN7NHWlbBANwK2qV9ohqUY3fBJI__VZo8e7batb2CWcg9ECNqrH_W_YX2vPsw';
+console.log('access_token:', access_token);
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAc1_WsPWybfbPHMzYZjyyMaoz5uv_TWn4",
+  authDomain: "vipavto333.firebaseapp.com",
+  databaseURL: "https://vipavto333-default-rtdb.firebaseio.com",
+  projectId: "vipavto333",
+  storageBucket: "vipavto333.firebasestorage.app",
+  messagingSenderId: "957358999381",
+  appId: "1:957358999381:web:e70a1b37279654b92191dc"
+};
+
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+let posts = [];
+
+function log(msg, type = '') {
+  const el = document.getElementById("log");
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML += `<div class="${type}">[${time}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function fetchPosts() {
+  log("Загружаем предложку...");
+  fetch("http://localhost:5000/get_suggestions")
+    .then(r => r.json())
+    .then(data => {
+      if (data.response?.items) {
+        posts = data.response.items.map(p => ({ ...p, bad: false }));
+        log("Получено постов: " + posts.length, "good");
+      } else {
+        log("Ошибка ответа: " + JSON.stringify(data), "bad");
+      }
+    })
+    .catch(err => {
+      log("Ошибка загрузки: " + err.message, "bad");
+    });
+}
+
+function normalizePhones(text) {
+  const matches = text.match(/(?:\+7|8)[\s\(\)\.\-]*\d{3}[\s\)\(\.\-]*\d{3}[\s\.-]*\d{2}[\s\.-]*\d{2}/g);
+  return matches ? matches.map(p => p.replace(/\D/g, '').replace(/^8/, '7')) : [];
+}
+
+async function getHistory() {
+  const snap = await db.ref("history").get();
+  const now = Date.now();
+  const seenIDs = new Set();
+  const seenPhones = new Set();
+  if (snap.exists()) {
+    const val = snap.val();
+    for (let key in val) {
+      const rec = val[key];
+      if (now - rec.ts < 86400000) {
+        if (rec.id) seenIDs.add(rec.id);
+        if (rec.phone) seenPhones.add(rec.phone);
+      } else {
+        db.ref("history/" + key).remove();
+      }
+    }
+  }
+  return { seenIDs, seenPhones };
+}
+
+
+
+
+
+
+
+function clearBad() {
+  const before = posts.length;
+  posts = posts.filter(p => !p.bad);
+  log(`Удалено: ${before - posts.length}`, "bad");
+}
+
+function postAll() {
+  const queue = posts.filter(p => !p.bad);
+  if (!queue.length) {
+    log("Нет подходящих постов для публикации", "bad");
+    return;
+  }
+  let i = 0;
+  function next() {
+    if (i >= queue.length) {
+      log("Выкладка завершена", "good");
+      return;
+    }
+    const post = queue[i];
+    fetch("http://localhost:5000/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: post.text,
+        attachments: post.attachments || [],
+        post_id: post.id
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.response?.post_id) {
+        log(`Выложен пост ${post.id} → ${data.response.post_id}`, "good");
+      } else {
+        log(`Ошибка при выкладке ${post.id}: ` + JSON.stringify(data), "bad");
+      }
+      i++;
+      setTimeout(next, 3000);
+    })
+    .catch(err => {
+      log("Ошибка отправки: " + err.message, "bad");
+      i++;
+      setTimeout(next, 3000);
+    });
+  }
+  next();
+}
+
+function logWithCheckbox(post, msg, isBad) {
+  const log = document.getElementById("log");
+  const div = document.createElement("div");
+  div.className = "log-entry" + (isBad ? " bad-post" : "");
+  div.style.display = "flex";
+  div.style.alignItems = "start";
+  div.style.marginBottom = "4px";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = isBad;
+  checkbox.dataset.postId = post.id;
+  checkbox.className = "delete-checkbox";
+  checkbox.style.marginRight = "8px";
+
+  const span = document.createElement("span");
+  span.innerHTML = msg;
+
+  div.appendChild(checkbox);
+  div.appendChild(span);
+  log.appendChild(div);
+}
+
+
+async function saveHistory(ids, phones) {
+  const now = Date.now();
+  const updates = {};
+  Object.keys(ids).forEach(id => {
+    updates["history/ids/" + id] = now;
+  });
+  Object.keys(phones).forEach(phone => {
+    updates["history/phones/" + phone] = now;
+  });
+  await firebase.database().ref().update(updates);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+async function checkPosts() {
+  const seenPhones = {};
+  const seenIDs = {};
+  const idCounts = {};
+  const phoneCounts = {};
+
+  posts.forEach(p => {
+    const author_id = p.signer_id || p.from_id || p.owner_id;
+    idCounts[author_id] = (idCounts[author_id] || 0) + 1;
+
+    const text = (p.text || "") + " " + (p.copy_history?.[0]?.text || "");
+    const phoneMatch = text.match(/(?:\+7|8)?[\s-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g);
+    const phones = (phoneMatch || []).map(p => p.replace(/\D/g, ""))
+                                     .filter(p => p.length >= 10 && p.length <= 11);
+    new Set(phones).forEach(ph => phoneCounts[ph] = (phoneCounts[ph] || 0) + 1);
+  });
+
+  posts.forEach(p => {
+    const author_id = p.signer_id || p.from_id || p.owner_id;
+    const text = (p.text || "") + " " + (p.copy_history?.[0]?.text || "");
+    const phoneMatch = text.match(/(?:\+7|8)?[\s-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g);
+    const phones = (phoneMatch || []).map(p => p.replace(/\D/g, ""))
+                                     .filter(p => p.length >= 10 && p.length <= 11);
+
+    const hasPhone = phones.length > 0;
+    const phoneRepeated = phones.some(ph => phoneCounts[ph] > 1 && !(phones.length === 1 || new Set(phones).size === 1));
+    const idRepeated = idCounts[author_id] > 1;
+    const isEmptyText = text.trim().length === 0;
+
+    let isBad = false;
+    let reason = "";
+
+    if (isEmptyText) {
+      isBad = true;
+      reason = "нет текста";
+    } else if (!hasPhone) {
+      isBad = true;
+      reason = "нет номера";
+    } else if (phoneRepeated) {
+      isBad = true;
+      reason = "повтор номера";
+    } else if (idRepeated) {
+      isBad = true;
+      reason = "повтор страницы";
+    }
+
+    const link = `<a href="https://vk.com/wall${p.owner_id}_${p.id}" target="_blank">${p.id}</a>`;
+    const phoneList = phones.join(", ") || "нет номера";
+
+    if (isBad) {
+      logWithCheckbox(p, `Удалён ${link}: ${reason} (ID ${author_id}) — ${phoneList}`, true);
+    } else {
+      logWithCheckbox(p, `Принят ${link}: ${phoneList} (ID ${author_id})`, false);
+    }
+
+    p.bad = isBad;
+    if (hasPhone) phones.forEach(ph => seenPhones[ph] = true);
+    seenIDs[author_id] = true;
+  });
+
+  log("Подходящих постов: " + posts.filter(p => !p.bad).length, "good");
+  await saveHistory(seenIDs, seenPhones);
+}
+
+</script>
+
+<script>
+const access_token = 'vk1.a.RwQAMDzAKOLOVWXNGaFusWEyDxGI_aUUVzavBjP3L0AlYLvM8jyV0cVAzQyB0zOym8iiCywQXAhMUGQlUM5QnRLjZT5EYreEv-Z4IFYn12b9mAI1aJDsWWuUv_rHuf3yyPzam2i7i193de8OVnCfUeTuPuN7NHWlbBANwK2qV9ohqUY3fBJI__VZo8e7batb2CWcg9ECNqrH_W_YX2vPsw';
+console.log('access_token:', access_token);
+window.onload = function() {
+  console.log("VK Постер загружен.");
+  console.log("access_token =", access_token);
+  console.log("posts =", posts);
+
+  window.publishAndDeleteCheckedPosts = async function () {
+    alert("Метод 1: Кнопка нажата");
+    log("Метод 1: кнопка нажата", "bad");
+  };
+
+  window.directDeleteCheckedPosts = async function () {
+    alert("Метод 2: Кнопка нажата");
+    log("Метод 2: кнопка нажата", "bad");
+  };
+};
+</script>
+
+<hr>
+<button onclick="publishAndDeleteCheckedPosts()">[ТЕСТ] Метод 1: опубликовать и удалить</button>
+<button onclick="directDeleteCheckedPosts()">[ТЕСТ] Метод 2: удалить напрямую</button>
+</body>
