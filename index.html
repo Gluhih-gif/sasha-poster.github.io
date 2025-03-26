@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>VK Постер — Проверка Прокси</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    pre {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Проверка VK Proxy</h1>
+  <button id="fetchButton">Загрузить предложку</button>
+  <pre id="output">Нажмите кнопку для загрузки данных</pre>
+
+  <script>
+    // Встроенные переменные
+    const proxyURL = "https://vk-proxy-dtc1.onrender.com"; // адрес твоего Render-прокси
+    const accessToken = "vk1.a.RwQAMDzAKOLOVWXNGaFusWEyDxGI_aUUVzavBjP3L0AlYLvM8jyV0cVAzQyB0zOym8iiCywQXAhMUGQlUM5QnRLjZT5EYreEv-Z4IFYn12b9mAI1aJDsWWuUv_rHuf3yyPzam2i7i193de8OVnCfUeTuPuN7NHWlbBANwK2qV9ohqUY3fBJI__VZo8e7batb2CWcg9ECNqrH_W_YX2vPsw";
+    const groupId = 136706358; // ID твоей группы
+    const vkMethod = "wall.get"; // метод VK API
+
+    // Формируем параметры запроса к VK API
+    const params = new URLSearchParams({
+      owner_id: "-" + groupId,   // для группы передаём отрицательное значение
+      filter: "suggests",
+      count: 100,
+      access_token: accessToken,
+      v: "5.199"
+    });
+
+    // Полный URL запроса через прокси
+    const fullURL = proxyURL + "/?method=" + vkMethod + "&" + params.toString();
+
+    console.log("Запрос к VK API через прокси:", fullURL);
+
+    document.getElementById("fetchButton").addEventListener("click", async function() {
+      const output = document.getElementById("output");
+      output.textContent = "Загружаю...";
+      try {
+        const response = await fetch(fullURL);
+        const data = await response.json();
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        output.textContent = "Ошибка: " + e.message;
+      }
+    });
+  </script>
+</body>
+</html>
